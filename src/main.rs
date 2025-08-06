@@ -24,8 +24,8 @@ fn main() -> io::Result<()> {
     loop {
         let username = get_username();
         let current_directory_path = get_display_path();
-        print!("{username}@rush:{current_directory_path}$ ");
-        
+        print!("{username}@rush:{current_directory_path} ❯ ");
+                
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
@@ -53,6 +53,15 @@ fn main() -> io::Result<()> {
             "exit" => {
                 println!("Exiting rush...");
                 break;
+            }
+            "cd" => {
+                let new_dir = args.get(0).map_or_else(|| env::var("HOME").unwrap_or_else(|_| "/".into()), |s| s.to_string());
+                
+                if let Err(e) = env::set_current_dir(&new_dir) {
+                    eprintln!("rush: cd: {}: {}", new_dir, e);
+                }
+                
+                continue;
             }
             _ => {}
         }

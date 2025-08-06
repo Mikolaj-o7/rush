@@ -2,9 +2,30 @@ use std::env;
 use std::io::{self, Write};
 use std::process::{Command, Stdio};
 
+fn get_username() -> String {
+    env::var("USER")
+        .or_else(|_| env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".into())
+}
+
+fn get_display_path() -> String {
+    let cwd = env::current_dir().unwrap_or_default();
+    let home = env::var("HOME").unwrap_or_default();
+    let cwd_str = cwd.to_string_lossy();
+
+    if cwd_str.starts_with(&home) {
+        cwd_str.replacen(&home, "~", 1)
+    } else {
+        cwd_str.to_string()
+    }
+}
+
 fn main() -> io::Result<()> {
     loop {
-        print!("rush> ");
+        let username = get_username();
+        let current_directory_path = get_display_path();
+        print!("{username}@rush:{current_directory_path}$ ");
+        
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
@@ -28,11 +49,14 @@ fn main() -> io::Result<()> {
         };
         let args: Vec<&str> = parts.collect();
 
-        if cmd == "exit" {
-            println!("Exiting rush...");
-            break;
+        match cmd {
+            "exit" => {
+                println!("Exiting rush...");
+                break;
+            }
+            _ => {}
         }
-
+        
         let result = Command::new(cmd)
             .args(&args)
             .stdin(Stdio::inherit())

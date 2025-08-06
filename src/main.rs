@@ -63,6 +63,11 @@ fn main() -> io::Result<()> {
                 
                 continue;
             }
+            "clear" | "cls" => {
+                print!("\x1b[2J\x1b[3J\x1b[H");
+                io::stdout().flush().unwrap();
+                continue;
+            }
             _ => {}
         }
         

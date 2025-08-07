@@ -1,4 +1,4 @@
-use reedline::{Prompt, PromptEditMode, PromptHistorySearch, Reedline, Signal};
+use reedline::{Prompt, PromptEditMode, PromptHistorySearch, FileBackedHistory, Reedline, Signal};
 use std::borrow::Cow;
 use std::env;
 use std::io::Write;
@@ -49,10 +49,14 @@ impl Prompt for RushPrompt {
 }
 
 fn main() {
-    let mut editor = Reedline::create();
-
+    let history = Box::new(
+        FileBackedHistory::with_file(1000, "rush_history.txt".into())
+            .expect("Failed to create history file")
+    );
+    let mut editor = Reedline::create().with_history(history);
+    let prompt = RushPrompt;
+    
     loop {
-        let prompt = RushPrompt;
                 
         match editor.read_line(&prompt) {
             Ok(Signal::Success(line)) => {

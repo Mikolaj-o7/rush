@@ -1,5 +1,7 @@
+use reedline::{Prompt, PromptEditMode, PromptHistorySearch, Reedline, Signal};
+use std::borrow::Cow;
 use std::env;
-use std::io::{self, Write};
+use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn get_username() -> String {
@@ -20,74 +22,109 @@ fn get_display_path() -> String {
     }
 }
 
-fn main() -> io::Result<()> {
-    loop {
+struct RushPrompt;
+
+impl Prompt for RushPrompt {
+    fn render_prompt_left(&self) -> Cow<str> {
         let username = get_username();
-        let current_directory_path = get_display_path();
-        print!("{username}@rush:{current_directory_path} ❯ ");
+        let path = get_display_path();
+        Cow::Owned(format!("{username}@rush:{path}"))
+    }
+
+    fn render_prompt_right(&self) -> Cow<str> {
+        Cow::Borrowed("")
+    }
+
+    fn render_prompt_indicator(&self, _prompt_mode: PromptEditMode) -> Cow<str> {
+        Cow::Borrowed("$ ")
+    }
+
+    fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+        Cow::Borrowed("⋙ ")
+    }
+
+    fn render_prompt_history_search_indicator(&self, _history_search: PromptHistorySearch) -> Cow<str> {
+        Cow::Borrowed("⎈ ")
+    }
+}
+
+fn main() {
+    let mut editor = Reedline::create();
+
+    loop {
+        let prompt = RushPrompt;
                 
-        io::stdout().flush().unwrap();
+        match editor.read_line(&prompt) {
+            Ok(Signal::Success(line)) => {
+                let input = line.trim();
 
-        let mut input = String::new();
-        let bytes_read = io::stdin().read_line(&mut input)?;
+                if input.is_empty() {
+                    continue;
+                }
 
-        if bytes_read == 0 {
-            println!();
-            break;
-        }
+                let mut parts = input.split_whitespace();
+                let cmd = match parts.next() {
+                    Some(c) => c,
+                    None => continue,
+                };
+                let args: Vec<&str> = parts.collect();
 
-        let input = input.trim();
+                match cmd {
+                    "exit" => {
+                        println!("Exiting rush...");
+                        break;
+                    }
+                    "cd" => {
+                        let new_dir = args.get(0).map_or_else(
+                            || env::var("HOME").unwrap_or_else(|_| "/".into()),
+                            |s| s.to_string(),
+                        );
 
-        if input.is_empty() {
-            continue;
-        }
+                        if let Err(e) = env::set_current_dir(&new_dir) {
+                            eprintln!("rush: cd: {}: {}", new_dir, e);
+                        }
 
-        let mut parts = input.split_whitespace();
-        let cmd = match parts.next() {
-            Some(c) => c,
-            None => continue,
-        };
-        let args: Vec<&str> = parts.collect();
+                        continue;
+                    }
+                    "clear" | "cls" => {
+                        print!("\x1b[2J\x1b[3J\x1b[H");
+                        std::io::stdout().flush().unwrap();
+                        continue;
+                    }
+                    _ => {}
+                }
 
-        match cmd {
-            "exit" => {
-                println!("Exiting rush...");
+                let result = Command::new(cmd)
+                    .args(&args)
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .spawn();
+
+                match result {
+                    Ok(mut child) => {
+                        let _ = child.wait();
+                    }
+                    Err(_) => {
+                        eprintln!("rush: \"{}\" is not a recognized command", cmd);
+                    }
+                }
+            }
+
+            Ok(Signal::CtrlD) => {
+                println!();
                 break;
             }
-            "cd" => {
-                let new_dir = args.get(0).map_or_else(|| env::var("HOME").unwrap_or_else(|_| "/".into()), |s| s.to_string());
-                
-                if let Err(e) = env::set_current_dir(&new_dir) {
-                    eprintln!("rush: cd: {}: {}", new_dir, e);
-                }
-                
-                continue;
-            }
-            "clear" | "cls" => {
-                print!("\x1b[2J\x1b[3J\x1b[H");
-                io::stdout().flush().unwrap();
-                continue;
-            }
-            _ => {}
-        }
-        
-        let result = Command::new(cmd)
-            .args(&args)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn();
 
-        match result {
-            Ok(mut child) => {
-                let _ = child.wait();
+            Ok(Signal::CtrlC) => {
+                println!();
+                continue;
             }
 
             Err(e) => {
-                eprintln!("rush: command not found: {}", cmd);
+                eprintln!("rush: error reading input: {}", e);
+                break;
             }
         }
     }
-
-    Ok(())
 }
